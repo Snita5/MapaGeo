@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Geoportal Lotniska</title>
+    <meta charset="UTF-8">
+    <link rel="icon" href="./samolot.ico" />
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.3/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.3/dist/leaflet.js"></script>
+    <!-- Leaflet Search -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/3.0.2/leaflet-search.min.css" />
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-search/3.0.2/leaflet-search.min.js"></script>
+    <!--Leaflet Fullscreen-->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.fullscreen/Control.FullScreen.css" />
+    <script src="https://unpkg.com/leaflet.fullscreen/Control.FullScreen.js"></script>
+    <!--Leaflet Hash-->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-hash/0.2.1/leaflet-hash.min.js"></script>
+    <!-- Axios -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            padding: 0;
+            margin: 0;
+        }
+        /* Stylizacja wyszukiwarki */
+        .search-input {
+            font-size: 16px !important;
+            padding: 10px !important;
+            border: 2px solid #f91bbe !important;
+            border-radius: 8px !important;
+            background-color: #ffe6e6 !important;
+            color: #333 !important;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .search-input:focus {
+            border-color: #f91bbe !important;
+            background-color: #fff !important;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
+        .leaflet-control-search {
+            position: relative;
+        }
+
+        .leaflet-control-search .search-button {
+            background-color: #4a148c !important;
+            border: none;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+        .leaflet-control-search .search-button:hover {
+            background-color: #f91bbe !important;
+        }
+
+        .leaflet-control-search .search-button::before {
+            content: '\1F50D'; /* Ikona lupy */
+            font-size: 20px;
+            color: #4a148c;
+        }
+
+        /* Styl etykiet z obramowaniem i kolorem tekstu */
+        .leaflet-popup-content {
+            color: #4a148c !important; /* Fioletowy kolor tekstu */
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+    <div id="map"></div>
+
+    <script>
+        // Inicjalizacja mapy
+        var map = L.map('map').setView([0, 0], 2); // Widok mapy świata
+    
+        // Warstwy kafelkowe
+        var baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: 'Map data © <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+            maxZoom: 19
+        }).addTo(map);
+
+        var satelliteLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+            attribution: 'Map data © <a href="https://opentopomap.org/">OpenTopoMap</a>',
+            maxZoom: 17
+        });
+
+        // Dodano dodatkową warstwę rastrową
+        var esriLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+    attribution: 'Tiles © Esri — Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community',
+    maxZoom: 17
+});
+    
+        // Ikona dla lotnisk
+        var customIcon = L.icon({
+            iconUrl: './samolot.png', // Względna ścieżka do ikony
+            iconSize: [30, 30],
+            iconAnchor: [15, 15],
+            popupAnchor: [0, -15]
+        });
+    
+        // Warstwa GeoJSON na lotniska
+        var airportLayer = L.geoJSON(null, {
+            onEachFeature: function (feature, layer) {
+                layer.bindPopup(`
+                    <strong>${feature.properties.name}</strong><br>
+                    Miasto: ${feature.properties.city}<br>
+                    Kod IATA: ${feature.properties.iata}<br>
+                    Liczba połączeń: ${feature.properties.connections}
+                `);
+            },
+            pointToLayer: function (feature, latlng) {
+                return L.marker(latlng, { icon: customIcon });
+            }
+        }).addTo(map);
+
+        // Wczytanie danych lotnisk z pliku JSON
+        fetch('lotniska.json') // Ścieżka do pliku JSON
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                // Konwersja danych do formatu GeoJSON i dodanie do warstwy
+                const airportsGeoJSON = data.map(airport => ({
+                    type: "Feature",
+                    geometry: {
+                        type: "Point",
+                        coordinates: [airport.longitude, airport.latitude]
+                    },
+                    properties: {
+                        name: airport.name,
+                        iata: airport.iata,
+                        city: airport.city,
+                        connections: airport.connections
+                    }
+                }));
+
+                airportLayer.addData(airportsGeoJSON);
+                console.log("Lotniska zostały dodane do mapy!");
+            })
+            .catch(error => {
+                console.error("Błąd podczas wczytywania danych z pliku JSON:", error);
+            });
+    
+        // Dodanie wyszukiwania
+        var searchControl = new L.Control.Search({
+            layer: airportLayer,
+            propertyName: 'name',
+            moveToLocation: function (latlng) {
+                map.setView(latlng, 10); // Przybliżenie do wybranego lotniska
+            }
+        });
+        map.addControl(searchControl);
+
+        // Modyfikacja stylu przycisku wyszukiwania
+        var searchButton = document.querySelector('.search-button');
+        if (searchButton) {
+            searchButton.style.backgroundColor = '#ff5733';
+            searchButton.style.color = 'white';
+        }
+    
+        // Panel warstw
+        var layersControl = L.control.layers({
+            "OpenStreetMap": baseLayer,
+            "Satelitarna": satelliteLayer,
+            "ESRI World Imagery": esriLayer
+        }, {
+            "Lotniska": airportLayer
+        }).addTo(map);
+
+        // Przycisk resetu widoku
+        var resetViewControl = L.control({ position: 'topright' });
+        resetViewControl.onAdd = function () {
+            var div = L.DomUtil.create('div', 'reset-view');
+            div.innerHTML = '<button style="padding: 5px;">Domyślny widok</button>';
+            div.onclick = function () {
+                map.setView([0, 0], 2);
+            };
+            return div;
+        };
+        resetViewControl.addTo(map);
+
+        L.control.fullscreen().addTo(map);
+
+        var hash = new L.Hash(map);
+
+    </script>    
+    
+</body>
+</html>
